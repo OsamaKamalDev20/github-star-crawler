@@ -1,0 +1,51 @@
+name: Crawl GitHub Stars
+
+on:
+  workflow_dispatch:
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Setup database
+        run: psql -h localhost -U postgres -f schema.sql
+        env:
+          PGPASSWORD: postgres
+
+      - name: Crawl stars
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python crawler/crawl_stars.py
+
+      - name: Dump database
+        run: pg_dump -h localhost -U postgres > stars.sql
+        env:
+          PGPASSWORD: postgres
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: stars-db
+          path: stars.sql
